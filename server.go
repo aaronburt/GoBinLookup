@@ -1,71 +1,73 @@
 package main
 
+//DUE TO SQLITE3 by Mattn it requires C (GCC installed), because it uses CGO  $env:CGO_ENABLED=1; go build server.go
+
 import (
-	"encoding/csv"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-func searchCSV(filePath, queryBin string) (string, error) {
-	// Open the CSV file
-	file, err := os.Open(filePath)
+func searchBinAndLog(databasePath string, binValue string) (string, error) {
+	// Start timing
+	start := time.Now()
+
+	// Connect to the SQLite database
+	db, err := sql.Open("sqlite3", databasePath)
 	if err != nil {
-		return "", fmt.Errorf("could not open file: %v", err)
+		return "", fmt.Errorf("could not open database: %v", err)
 	}
-	defer file.Close()
 
-	// Create a new CSV reader
-	reader := csv.NewReader(file)
+	defer db.Close()
 
-	// Read all records from the CSV
-	records, err := reader.ReadAll()
+	// Prepare and execute the SQL query, prepared statements!!!!
+	query := "SELECT * FROM bin WHERE BIN = ?"
+	rows, err := db.Query(query, binValue)
 	if err != nil {
-		return "", fmt.Errorf("could not read file: %v", err)
+		return "", fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	// Retrieve column names
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", fmt.Errorf("could not retrieve columns: %v", err)
 	}
 
-	// Check if there are any records
-	if len(records) == 0 {
-		return "", fmt.Errorf("no records found in CSV file")
+	// Prepare a slice to hold column values
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range columns {
+		valuePtrs[i] = &values[i]
 	}
 
-	// Assuming BIN is the first column, skip header row
-	header := records[0]
-	if len(header) == 0 || strings.ToUpper(header[0]) != "BIN" {
-		return "", fmt.Errorf("the first column is not 'BIN' as expected")
-	}
+	// Create a slice to hold the result
+	var result []map[string]interface{}
 
-	// Find the index of the 'Issuer' column
-	issuerIndex := -1
-	for i, colName := range header {
-		if strings.ToUpper(colName) == "ISSUER" {
-			issuerIndex = i
-			break
+	// Fetch the result
+	for rows.Next() {
+		err := rows.Scan(valuePtrs...)
+		if err != nil {
+			return "", fmt.Errorf("could not scan row: %v", err)
 		}
-	}
-	if issuerIndex == -1 {
-		return "", fmt.Errorf("ERROR, couldn't find 'ISSUER' column? Strange")
-	}
 
-	// Create a map to store the results
-	result := make([]map[string]string, 0)
-
-	// Iterate through the records and find the matching rows
-	for _, record := range records[1:] {
-		if len(record) > 0 && record[0] == queryBin {
-			row := make(map[string]string)
-			for i, col := range record {
-				if i < len(header) {
-					row[header[i]] = col
-				}
-			}
-			result = append(result, row)
+		row := make(map[string]interface{})
+		for i, colName := range columns {
+			row[colName] = values[i]
 		}
+		result = append(result, row)
+	}
+
+	// Handle no records found
+	if len(result) == 0 {
+		return "", fmt.Errorf("no record found with BIN = %s", binValue)
 	}
 
 	// Convert the result to JSON
@@ -73,6 +75,10 @@ func searchCSV(filePath, queryBin string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not convert result to JSON: %v", err)
 	}
+
+	// End timing and log the time taken
+	duration := time.Since(start).Milliseconds()
+	fmt.Printf("Query took %d ms.\n", duration)
 
 	return string(jsonResult), nil
 }
@@ -93,7 +99,7 @@ func issuerHandler(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	row, err := searchCSV("static/bin-list-data.csv", query)
+	row, err := searchBinAndLog("static/sqlite.db", query)
 
 	if err != nil {
 		fmt.Fprintf(response, "Error: %v", err)
