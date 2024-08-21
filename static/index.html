@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIN Lookup Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 100%;
+            max-width: 600px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            padding: 8px 12px; 
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px; 
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .result {
+            margin-top: 20px;
+        }
+        .result h2 {
+            margin-top: 0;
+        }
+        .result p {
+            margin: 5px 0;
+            user-select: text;
+            cursor: text;
+        }
+        .copy-button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+            transition: background-color 0.3s ease;
+        }
+        .copy-button:hover {
+            background-color: #0056b3;
+        }
+        .credit {
+            margin-top: 20px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #121212;
+                color: #e0e0e0;
+            }
+            .container {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+                border: 1px solid #333;
+            }
+            h1 {
+                color: #e0e0e0;
+            }
+            input[type="text"] {
+                background-color: #333;
+                color: #e0e0e0;
+                border: 1px solid #555;
+            }
+            button {
+                background-color: #007bff;
+                color: #fff;
+            }
+            button:hover {
+                background-color: #0056b3;
+            }
+            .error-message {
+                color: #ff6b6b;
+            }
+            .result {
+                border-top: 1px solid #333;
+            }
+            .result p {
+                color: #e0e0e0;
+            }
+            .copy-button {
+                background-color: #0056b3;
+                color: #fff;
+            }
+            .copy-button:hover {
+                background-color: #003d7a;
+            }
+            .credit a {
+                color: #80cbc4;
+            }
+            .credit a:hover {
+                color: #4db6ac;
+            }
+        }
+
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BIN Lookup Service</h1>
+        <form id="binLookupForm">
+            <div class="form-group">
+                <label for="bin">Enter BIN:</label>
+                <input type="text" id="bin" name="bin" placeholder="Enter 6-digit BIN number" required pattern="\d{6}" maxlength="6">
+                <div class="error-message" id="errorMessage"></div>
+            </div>
+            <button type="submit">Lookup</button>
+        </form>
+        <div class="result" id="resultContainer" style="display:none;">
+            <h2>BIN Information:</h2>
+            <p><strong>BIN:</strong> <span id="binNumber">Not available</span></p>
+            <p><strong>Brand:</strong> <span id="brand">Not available</span></p>
+            <p><strong>Category:</strong> <span id="category">Not available</span></p>
+            <p><strong>Country:</strong> <span id="countryName">Not available</span></p>
+            <p><strong>Issuer:</strong> <span id="issuer">Not available</span></p>
+            <p><strong>Issuer Phone:</strong> <span id="issuerPhone">Not available</span></p>
+            <p><strong>Issuer URL:</strong> <span id="issuerUrl">Not available</span></p>
+            <p><strong>Type:</strong> <span id="type">Not available</span></p>
+            <p><strong>ISO Code (2):</strong> <span id="isoCode2">Not available</span></p>
+            <p><strong>ISO Code (3):</strong> <span id="isoCode3">Not available</span></p>
+            <button class="copy-button" id="copyButton">Copy to Clipboard</button>
+        </div>
+        <div class="credit">
+            Data provided by <a href="https://github.com/venelinkochev/bin-list-data" target="_blank">bin-list-data</a>.
+        </div>
+    </div>
+    <script>
+        document.getElementById('binLookupForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const binInput = document.getElementById('bin');
+            const errorMessage = document.getElementById('errorMessage');
+            const resultContainer = document.getElementById('resultContainer');
+            
+            // Clear any previous error messages
+            errorMessage.textContent = '';
+
+            // Validate the BIN input, regex madness, i understand client validation isn't good either but this is for the user not the servers sake
+            const bin = binInput.value;
+            if (!/^\d{6}$/.test(bin)) {
+                errorMessage.textContent = 'BIN must be exactly 6 digits long and contain only numbers.';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/issuer?bin=${encodeURIComponent(bin)}`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                
+                // Parse the JSON response
+                const data = await response.json();
+                const result = data[0]; // Assuming the response is an array with one object, select the first one
+                
+                // Update the result container with the fetched data, sure i could use a for loop but fuck it 
+                document.getElementById('binNumber').textContent = result.BIN || 'Not available';
+                document.getElementById('brand').textContent = result.Brand || 'Not available';
+                document.getElementById('category').textContent = result.Category || 'Not available';
+                document.getElementById('countryName').textContent = result.CountryName || 'Not available';
+                document.getElementById('issuer').textContent = result.Issuer || 'Not available';
+                document.getElementById('issuerPhone').textContent = result.IssuerPhone || 'Not available';
+                document.getElementById('issuerUrl').textContent = result.IssuerUrl || 'Not available';
+                document.getElementById('type').textContent = result.Type || 'Not available';
+                document.getElementById('isoCode2').textContent = result.isoCode2 || 'Not available';
+                document.getElementById('isoCode3').textContent = result.isoCode3 || 'Not available';
+                
+                resultContainer.style.display = 'block';
+            } catch (error) {
+                console.error('Error fetching BIN data:', error);
+                alert('There was an error fetching the BIN information. Please try again.');
+            }
+        });
+
+        document.getElementById('copyButton').addEventListener('click', function() {
+            const resultText = Array.from(document.querySelectorAll('.result p')).map(p => p.textContent).join('\n');
+            navigator.clipboard.writeText(resultText).then(() => {
+                alert('BIN information copied to clipboard.');
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                alert('Failed to copy BIN information to clipboard.');
+            });
+        });
+    </script>
+</body>
+</html>
