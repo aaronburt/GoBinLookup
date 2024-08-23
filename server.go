@@ -9,15 +9,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func searchBinAndLog(databasePath string, binValue string) (string, error) {
-	// Start timing
-	start := time.Now()
 
 	// Connect to the SQLite database
 	db, err := sql.Open("sqlite3", databasePath)
@@ -75,10 +72,6 @@ func searchBinAndLog(databasePath string, binValue string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not convert result to JSON: %v", err)
 	}
-
-	// End timing and log the time taken
-	duration := time.Since(start).Milliseconds()
-	fmt.Printf("Query took %d ms.\n", duration)
 
 	return string(jsonResult), nil
 }
